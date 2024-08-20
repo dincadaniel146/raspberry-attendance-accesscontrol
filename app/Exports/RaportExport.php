@@ -2,37 +2,63 @@
 
 namespace App\Exports;
 
-use App\Models\Raport;
 use Maatwebsite\Excel\Concerns\FromCollection;
-use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMultipleSheets;
+use Maatwebsite\Excel\Concerns\WithTitle;
 
-class RaportExport implements FromCollection, WithHeadings
+class RaportExport implements WithMultipleSheets
 {
-    protected $data;
+    protected $userData;
 
-    public function __construct($data)
+    public function __construct($userData)
     {
-        $this->data = $data;
+        $this->userData = $userData;
     }
 
-    public function collection()
+    public function sheets(): array
     {
-        return $this->data;
-    }
+        $sheets = [];
 
-    public function headings(): array
-    {
-        return [
-            'ID',
-            'Nume',
-            'Departament',
-            'Data',
-            'Check-in',
-            'Check-out',
-            'Timp prezenta',
-            'Peste/Sub timp',
-            'Pauze',
-            'Durata Pauza'
-        ];
+        foreach ($this->userData as $userName => $userData) {
+            $sheets[] = new class($userName, $userData) implements FromCollection, WithTitle
+            {
+                protected $userName;
+                protected $userData;
+
+                public function __construct($userName, $userData)
+                {
+                    $this->userName = $userName;
+                    $this->userData = $userData;
+                }
+
+                public function title(): string
+                {
+                    return $this->userName;
+                }
+
+                public function collection()
+                {
+                    return $this->userData;
+                }
+
+                public function headings(): array
+                {
+                    return [
+                        'ID',
+                        'Nume',
+                        'Departament',
+                        'Data',
+                        'Check-in',
+                        'Check-out',
+                        'Timp prezenta',
+                        'Peste/Sub timp',
+                        'Pauze',
+                        'Durata Pauza'
+                    ];
+                }
+            };
+        }
+
+        return $sheets;
     }
 }

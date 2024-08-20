@@ -8,10 +8,10 @@ class PrezentaController extends Controller
 {
 
 
-    public function index()
+    public function index() //calcul prezenta pentru ziua curenta
     {
         $users = DB::table('utilizator')->get();
-        $prezenta = [];
+        $prezenta = []; //array unde stocham datele pentru utilizator
         
         foreach ($users as $user) {
             $intrare = DB::table('condica')
@@ -21,21 +21,19 @@ class PrezentaController extends Controller
                 ->orderBy('data_ora')
                 ->first();
                 
-            // Check if 'departament' key exists in the $user object
+            // Verificam daca user-ul are un departament setat
             if (isset($user->departament)) {
-                // If 'departament' exists, use it
                 $departament = $user->departament;
             } else {
-                // If 'departament' doesn't exist, assign a default value or handle it as needed
-                $departament = 'N/A'; // Assigning a default value
+                // Daca nu, este setata o valoare default
+                $departament = 'N/A';
             }    
     
-            // Check if $intrare exists and has 'data_ora' property
+            // Verificam daca avem o intrare in ziua respectiva si are proprietatea data_ora
             if ($intrare && isset($intrare->data_ora)) {
-                // If 'intrare' record exists and 'data_ora' is set, add user's attendance data
+                // Daca un utilizator are o stare de intrare este considerat prezent si stocham in array datele respective
                 $prezenta[] = ['nume' => $user->nume,'id'=> $user->id, 'stare' => 'Da' , 'data_ora'=>$intrare->data_ora , 'departament'=> $departament];
             } else {
-                // If 'intrare' record doesn't exist or 'data_ora' is not set, mark user as absent
                 $prezenta[] = ['nume' => $user->nume,'id'=> $user->id, 'stare' => 'Nu', 'departament'=>$departament ];
             }
         }
@@ -44,14 +42,15 @@ class PrezentaController extends Controller
     }
     
 
+    
 
     
-    public function data(Request $request, $date)
+    public function data(Request $request, $date)//calcul prezenta pentru o zi aleasa din datepicker
 {
 
     $users = DB::table('utilizator')->get();
 
-    $prezenta = []; // Sample data, replace it with your actual implementation
+    $prezenta = []; 
     foreach ($users as $user) {
         $intrare = DB::table('condica')
             ->where('user_id', $user->id)
@@ -60,11 +59,11 @@ class PrezentaController extends Controller
             ->orderBy('data_ora')
             ->first();
             if (isset($user->departament)) {
-                // If 'departament' exists, use it
+
                 $departament = $user->departament;
             } else {
-                // If 'departament' doesn't exist, assign a default value or handle it as needed
-                $departament = 'N/A'; // Assigning a default value
+
+                $departament = 'N/A'; 
             }
         if ($intrare) {
             $prezenta[] = ['nume' => $user->nume,'id'=> $user->id, 'stare' => 'Da' , 'data_ora' => $intrare->data_ora , 'departament' => $departament];
@@ -72,53 +71,48 @@ class PrezentaController extends Controller
             $prezenta[] = ['nume' => $user->nume,'id'=> $user->id, 'stare' => 'Nu' , 'departament' =>$departament];
         }
     }
-    // Return the attendance data as JSON
     return response()->json(['prezenta' => $prezenta, 'date' => $date]);
 }
-public function lunar(Request $request)
+
+public function lunar(Request $request) //calcul numarului de prezente pentru luna curenta
 {
     $users = DB::table('utilizator')->get();
     $prezenta=[];
-    $currentMonth = Carbon::now()->month;
+    $lunaCurenta = Carbon::now()->month; //preluam luna curenta
     foreach ($users as $user) {
-        $userIntrariCounts = DB::table('condica')
+        $intrariCount = DB::table('condica')
             ->where('user_id', $user->id)        
-            ->whereMonth('data_ora', $currentMonth)
-            ->select(DB::raw('COUNT(DISTINCT DATE(data_ora)) as intrari_count'))
+            ->whereMonth('data_ora', $lunaCurenta)
+            ->select(DB::raw('COUNT(DISTINCT DATE(data_ora)) as intrari_count')) //selectam o intrare in ziua respectiva 
             ->first(); 
             if (isset($user->departament)) {
-                // If 'departament' exists, use it
                 $departament = $user->departament;
             } else {
-                // If 'departament' doesn't exist, assign a default value or handle it as needed
-                $departament = 'N/A'; // Assigning a default value
+                $departament = 'N/A'; 
             }
-        $prezenta[] = ['nume' => $user->nume,'departament'=>$departament,'id'=> $user->id, 'prezente'=> $userIntrariCounts->intrari_count];
+        $prezenta[] = ['nume' => $user->nume,'departament'=>$departament,'id'=> $user->id, 'prezente'=> $intrariCount->intrari_count];
         
 }
 return view('prezentalunara', ['prezenta' => $prezenta]);
 }
 
-public function lunardata(Request $request, $date)
+public function lunardata(Request $request, $date) //calcul numarului de prezente pentru o luna aleasa din datepicker
 {
     $users = DB::table('utilizator')->get();
     $prezenta=[];
-   // $selectedMonth = Carbon::create(null, $date, 1)->format('m');
 
     foreach ($users as $user) {
-        $userIntrariCounts = DB::table('condica')
+        $intrariCount = DB::table('condica')
             ->where('user_id', $user->id)
             ->whereMonth('data_ora', $date) 
             ->select(DB::raw('COUNT(DISTINCT DATE(data_ora)) as intrari_count'))
             ->first(); 
             if (isset($user->departament)) {
-                // If 'departament' exists, use it
                 $departament = $user->departament;
             } else {
-                // If 'departament' doesn't exist, assign a default value or handle it as needed
-                $departament = 'N/A'; // Assigning a default value
+                $departament = 'N/A'; 
             }
-        $prezenta[] = ['nume' => $user->nume,'id'=> $user->id,'departament'=>$departament, 'prezente' => $userIntrariCounts->intrari_count ?? 0];
+        $prezenta[] = ['nume' => $user->nume,'id'=> $user->id,'departament'=>$departament, 'prezente' => $intrariCount->intrari_count ?? 0];
     }
     return response()->json(['prezentalunara' => $prezenta, 'date' => $date]);
 }

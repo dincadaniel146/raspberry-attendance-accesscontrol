@@ -39,9 +39,7 @@ Route::get('/utilizatori', [UtilizatorController::class, 'index'])
 Route::post('/utilizatori/newuser', [UtilizatorController::class, 'newuser'])->name('utilizatori.newuser');
 Route::get('/users/{id}/edit', [UtilizatorController::class, 'edit'])->name('utilizatori.edit');
 Route::put('/users/{id}', [UtilizatorController::class, 'update'])->name('utilizatori.update');
-Route::delete('/utilizatori/{id}',[UtilizatorController::class, 'destroy'])->name('utilizatori.destroy');
-Route::get('/utilizatori/search', [UtilizatorController::class, 'search'])->name('utilizatori.search');
-Route::get('/utilizatori/autosuggest', [UtilizatorController::class, 'autosuggest'])->name('utilizatori.autosuggest');
+Route::delete('/utilizatori/{id}',[UtilizatorController::class, 'delete'])->name('utilizatori.delete');
 
 Route::get('/prezenta', [PrezentaController::class, 'index'])
 ->middleware(['auth', 'verified'])
@@ -65,7 +63,7 @@ Route::post('/export', [OptiuniController::class, 'exportData'])->name('optiuni.
 Route::get('/condica', [CondicaController::class, 'index'])
     ->middleware(['auth', 'verified'])
     ->name('condica');
-Route::get('/condica/{date}', [CondicaController::class,'showAttendance'])->name('condica.data');
+Route::get('/condica/{date}', [CondicaController::class,'condicaIndex'])->name('condica.data');
 
 Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');

@@ -10,21 +10,21 @@ class UtilizatorController extends Controller
     public function index(Request $request)
 {
     
-
     $users = DB::table('utilizator')->paginate(10);
     return view('utilizatori')->with('users', $users);
 }
 
-    public function destroy($id)
+    public function delete($id) //stergere utilizator
     {
-        // Find the user by ID
+        // Cautam utilizatorul dupa ID
         $user = DB::table('utilizator')->where('id', '=', $id)->delete();
 
-        // Redirect back to the page where the users are listed
-        return redirect()->route('utilizatori')->with('success', 'Utilizatorul a fost sters.');
+        // Inapoi la pagina cu utilizatori alaturi de un mesaj de succes
+        return redirect()->route('utilizatori')->with('success', 'Utilizatorul a fost șters!');
     }
     public function usercount()
     {
+        //endpoint nr. total utilizatori
         $count= DB::table('utilizator')->count();
         return view('dashboard')->with('count',$count);
     }
@@ -32,6 +32,7 @@ class UtilizatorController extends Controller
 
     public function newuser(Request $request)
     {
+        //Adaugarea unui utilizator nou, campurile nume si rfid_uid sunt necesare, timp_de_lucru este prestabilit la 8 ore
         $request->validate([
             'nume' => 'required|string',
             'rfid_uid' => 'required|string',
@@ -48,45 +49,29 @@ class UtilizatorController extends Controller
             'email' => $request->input('email')
         ]);
 
-        return redirect()->route('utilizatori')->with('success', 'Utilizator adaugat !');
+        return redirect()->route('utilizatori')->with('success', 'Utilizator adăugat !');
     }
 
     public function edit($id)
     {
+        //Afisarea datelor in modalul de editare
 $user=DB::table('utilizator')->find($id);
 return view('utilizatori', compact('user'));
 
     }
     public function update(Request $request, $id)
     {
+        //Actualizare utilizator
         DB::table('utilizator')->where('id', $id)->update($request->except(['_token', '_method','created']));
 
         return redirect()->route('utilizatori')->with('success', 'Utilizator actualizat !');
     }
-    public function search(Request $request)
-{
-    $search = $request->input('search');
-    // Perform your search query here
-    $results = DB::table('utilizator')
-                    ->where('nume', 'LIKE', "%$search%")
-                    ->get();
-    return view('utilizatori.index', ['results' => $results]);
 
-}
-public function autosuggest(Request $request)
-{
-    $query = $request->input('query');
 
-    // Perform a query to retrieve autosuggestions based on the search query
-    $suggestions = DB::table('utilizator')->where('nume', 'like', "%$query%")->pluck('nume');
-
-    return response()->json($suggestions);
-}
 
 
 
     
 }
-
 
 

@@ -8,7 +8,7 @@ class DashboardController extends Controller
 {
     public function IntrariIesiri()
     {
-        // Fetch the 5 most recent entries (intrari)
+        // 5 cele mai recente intrari
         $intrari = DB::table('condica')
             ->select('user_id', 'nume', 'stare', 'data_ora')
             ->whereDate('data_ora', now()->toDateString())
@@ -17,7 +17,7 @@ class DashboardController extends Controller
             ->limit(4)
             ->get();
     
-        // Fetch the 5 most recent exits (iesiri)
+        // 5 cele mai recente iesiri
         $iesiri = DB::table('condica')
             ->select('user_id', 'nume', 'stare', 'data_ora')
             ->whereDate('data_ora', now()->toDateString())
@@ -26,7 +26,7 @@ class DashboardController extends Controller
             ->limit(4)
             ->get();
     
-        // Pass both sets of data to the 'dashboard' view
+
         return view('dashboard')->with('intrari', $intrari)->with('iesiri', $iesiri);
     }
     
@@ -34,17 +34,20 @@ class DashboardController extends Controller
     
     public function userCount()
     {
+        //endpoin nr. total user
         $userCount = DB::table('utilizator')->count();
         return response()->json(['userCount' => $userCount]);
     }
     public function date()
     {
+        //afisare data de astazi
         Carbon::setLocale('ro');
         $data = Carbon::now()->timezone('Europe/Bucharest')->isoFormat('dddd, D MMMM YYYY');
         return response()->json(['data'=> $data]);
     }
     public function checkInCount()
     {
+        //numar utilizatori care au dat check-in astazi
         $id_exclus= 0;
         $checkInCount = DB::table('condica')
         ->select('user_id')
@@ -59,6 +62,7 @@ class DashboardController extends Controller
     }
     public function checkOutCount()
     {
+        //numar utilizatori care au dat check-out astazi
         $id_exclus= 0;
         $checkOutCount = DB::table('condica')
         ->select('user_id')
@@ -73,13 +77,14 @@ class DashboardController extends Controller
     }
     public function AbsentiCount()
     {
+        //numar utilizatori care nu au dat check-in astazi
         $users = DB::table('utilizator')->get();
         $absentUserCount = 0;
     
         foreach ($users as $user) {
             $intrare = DB::table('condica')
                 ->where('user_id', $user->id)
-                ->where('stare', 'intrare') // Check for 'intrare' status
+                ->where('stare', 'intrare') 
                 ->whereDate('data_ora', now()->toDateString())
                 ->orderBy('data_ora')
                 ->first();

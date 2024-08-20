@@ -9,20 +9,22 @@ class CondicaController extends Controller
 {
     public function index()
     {
+        //pagina principala cu activitatea de astazi
         $condica = DB::table('condica')
         ->whereDate('data_ora', now()->toDateString())
         ->paginate(10);
         return view('condica')->with('condica', $condica);
     }
-    public function showAttendance(Request $request, $date)
+    public function condicaIndex(Request $request, $date)
 {
-    $attendanceData = DB::table('condica')
+    //activitate pe o anume data
+    $condica = DB::table('condica')
         ->whereDate('data_ora', $date)
         ->paginate(10);
         
 
         
-    return view('condica.index')->with('attendanceData',$attendanceData);
+    return view('condica.index')->with('condica',$condica);
 }
 
 

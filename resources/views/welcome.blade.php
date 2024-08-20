@@ -16,26 +16,26 @@
         </style>
     </head>
     <body class="antialiased">
-    <div class="relative sm:flex sm:justify-center sm:items-center min-h-screen bg-dots-darker bg-center bg-gray-100 dark:bg-dots-lighter dark:bg-gray-900 selection:bg-red-500 selection:text-white">
+    <div class="relative sm:flex sm:justify-center sm:items-center min-h-screen bg-dots-darker bg-center bg-gray-100 dark:bg-dots-lighter  selection:bg-red-500 selection:text-white">
         <div class="max-w-7xl mx-auto p-6 lg:p-8">
             <div class="flex justify-center">
-                <img src="logo.png" width="50" height="50" />
+                <img src="logo.png" width="200" height="200" />
             </div>
 
             @auth
-                <div class="text-center text-xl text-gray-900 dark:text-gray-400 mt-16">
-                    Bun venit, {{ Auth::user()->name }}! Sunteti deja logat.
+                <div class="text-center text-xl text-gray-900  mt-16">
+                    Bun venit, {{ Auth::user()->name }}! 
                 </div>
             @else
-                <div class="text-center text-xl text-gray-900 dark:text-gray-400 mt-16">
-                    Bun venit! Logati-va sau creati un cont pentru a accesa aplicatia.
+                <div class="text-center text-xl text-gray-900  mt-16">
+                Bun venit! Logați-va sau creați un cont pentru a accesa aplicația.
                 </div>
 
             @endauth
 
             <div class="text-center mt-8" style="margin-top:30px;">
                 @auth
-                    <a href="{{ url('/dashboard') }}" class="font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500" style="">Tablou de bord</a>
+                    <a href="{{ url('/dashboard') }}" class="font-semibold text-gray-600 hover:text-gray-900   focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500" style="">Tablou de bord</a>
                     <form method="POST" action="{{ route('logout') }}">
                     @csrf
                     <x-responsive-nav-link :href="route('logout')"
@@ -45,10 +45,10 @@
                     </x-responsive-nav-link>
                 </form>
                 @else
-                    <a href="{{ route('login') }}" class="font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500">Log in</a>
+                    <a href="{{ route('login') }}" class="font-semibold text-gray-600 hover:text-gray-900   focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500">Log in</a>
 
                     @if (Route::has('register'))
-                        <a href="{{ route('register') }}" class="ml-4 font-semibold text-gray-600 hover:text-gray-900 dark:text-gray-400 dark:hover:text-white focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500">Register</a>
+                        <a href="{{ route('register') }}" class="ml-4 font-semibold text-gray-600 hover:text-gray-900   focus:outline focus:outline-2 focus:rounded-sm focus:outline-red-500">Înregistrare</a>
                     @endif
                 @endauth
             </div>

@@ -8,82 +8,76 @@ class RaportController extends Controller
 {
    public function index()
 {
-    // Fetch the required data from the database
+    // Functie pentru calculul timpului lucrat + numarul si durata pauzelor pentru ziua curenta
     $raportData = DB::table('utilizator')
         ->leftJoin('condica as intrare', function ($join) {
             $join->on('utilizator.id', '=', 'intrare.user_id')
                 ->where('intrare.stare', '=', 'intrare')
                 ->whereDate('intrare.data_ora', '=', now()->toDateString())
-                ->orderBy('intrare.data_ora', 'asc'); // Get the first entry of the day
-        })
-        ->leftJoin('condica as iesire', function ($join) {
-            $join->on('utilizator.id', '=', 'iesire.user_id')
-                ->where('iesire.stare', '=', 'iesire')
-                ->whereDate('iesire.data_ora', '=', now()->toDateString())
-                ->orderBy('iesire.data_ora', 'asc'); // Get the last entry of the day
+                ->orderBy('intrare.data_ora', 'asc'); // Prima intrare de astazi
         })
         ->select(
             'utilizator.id as ID',
             'utilizator.nume as NUME',
-            DB::raw('MIN(intrare.data_ora) as CHECK_IN'),
-            DB::raw('(SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "iesire" AND DATE(data_ora) = CURDATE() AND data_ora > (SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "intrare" AND DATE(data_ora) = CURDATE() ORDER BY data_ora LIMIT 1) ORDER BY data_ora LIMIT 1) as CHECK_OUT'), // Select the first check-out after the check-in
+            DB::raw('MIN(intrare.data_ora) as CHECK_IN'), //prima intrare
+            DB::raw('(SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "iesire" AND DATE(data_ora) = CURDATE() AND data_ora > (SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "intrare" AND DATE(data_ora) = CURDATE() ORDER BY data_ora LIMIT 1) ORDER BY data_ora LIMIT 1) as CHECK_OUT'), // Prima stare de "iesire" care apare dupa prima intrare
             'utilizator.departament as DEPARTAMENT',
-            DB::raw('(SELECT COUNT(*) FROM condica WHERE user_id = utilizator.id AND stare = "pauza" AND DATE(data_ora) = CURDATE()) as PAUZA_COUNT')
+            DB::raw('(SELECT COUNT(*) FROM condica WHERE user_id = utilizator.id AND stare = "pauza" AND DATE(data_ora) = CURDATE()) as PAUZA_COUNT') //Numarul de pauze
         )
         ->groupBy('utilizator.id', 'utilizator.nume', 'utilizator.departament')
         ->get();
 
-    // Calculate TIMP_LUCRAT, PESTE/SUB NORMA, and PAUZA_DURATION
-// Calculate TIMP_LUCRAT, PESTE/SUB NORMA, and PAUZA_DURATION
+// Folosind functia map iteram peste fiecare item pentru a returna modificari sau transformari ale acestora
 $raportData = $raportData->map(function ($item) {
+    //valori default daca avem valori nule
     $item->CHECK_IN = $item->CHECK_IN ?: 'N/A';
     $item->CHECK_OUT = $item->CHECK_OUT ?: 'N/A';
     $item->PAUZA_COUNT = $item->PAUZA_COUNT ?: '0';
 
-    // Calculate TIMP_LUCRAT
+    // Calcul timp_lucrat
     if ($item->CHECK_IN && $item->CHECK_OUT) {
         $checkIn = strtotime($item->CHECK_IN);
         $checkOut = strtotime($item->CHECK_OUT);
 
-        // Handle case when check-in time is later than check-out time
+        // Daca checkIn apare dupa checkOut timpul lucrat nu se va mai calcula
         if ($checkIn > $checkOut) {
             $item->TIMP_LUCRAT = 0;
             $item->PESTE_SUB_NORMA = 'N/A';
         } else {
-            // Calculate TIMP_LUCRAT
-            $workedHours = ($checkOut - $checkIn) / 3600;
-            $workedMinutes = ($checkOut - $checkIn) / 60;
+            //calcul ore/minute lucrate, impartim la 60 de secunde pentru a afla minutele si la 3600 pentru a afla orele 
+            $orePrezenta = ($checkOut - $checkIn) / 3600; 
+            $minutePrezenta = ($checkOut - $checkIn) / 60;
 
-            if ($workedHours > 0) {
-                if ($workedHours > 1.1) {
-                    $item->TIMP_LUCRAT = round($workedHours, 1) . ' ore';
-                } elseif ($workedHours >= 1 && $workedHours < 1.1) {
-                    $item->TIMP_LUCRAT = round($workedHours, 1) . ' ora';
-                } else {
-                    $item->TIMP_LUCRAT = round($workedMinutes, 1) . ' minute';
+            if ($orePrezenta > 0) {
+                if ($orePrezenta > 1.1) { // caz in care avem mai mult de o ora lucrataa
+                    $item->TIMP_LUCRAT = round($orePrezenta, 3) . ' ore'; //rotunjim orele lucrate la doua zecimale
+                } elseif ($orePrezenta >= 1 && $orePrezenta < 1.1) { //caz in care este fix o ora lucrata
+                    $item->TIMP_LUCRAT = round($orePrezenta, 1) . ' ora';
+                } else { //caz in care timp_lucrat nu are cel putin o ora, afisarea se va face in minute
+                    $item->TIMP_LUCRAT = round($minutePrezenta, 3) . ' minute';
                 }
-            } else {
+            } else { //error handling in caz de valori negative
                 $item->TIMP_LUCRAT = 0;
             }
 
-            // Fetch the timp_de_lucru from the database for each user
+            // Preluam timp_de_lucru din baza de date pentru calculul SUB sau PESTE
             $timpDeLucru = DB::table('utilizator')->where('id', $item->ID)->value('timp_de_lucru');
 
-            // Determine if worked hours are PESTE or SUB NORMA
-            if ($workedHours > $timpDeLucru) {
-                $item->PESTE_SUB_NORMA = 'PESTE :' . round($workedHours - $timpDeLucru, 1) . " ore";
-            } else {
-                $item->PESTE_SUB_NORMA = 'SUB :' . round($workedHours - $timpDeLucru, 1) . " ore";
+            
+            if ($orePrezenta > $timpDeLucru) { // Caz in care timpul lucrat este peste norma stabilita
+                $item->PESTE_SUB_NORMA = 'PESTE :' . round($orePrezenta - $timpDeLucru, 1) . " ore";
+            } else { // Caz in care timpul lucrat este sub norma stabilita
+                $item->PESTE_SUB_NORMA = 'SUB :' . round($orePrezenta - $timpDeLucru, 1) . " ore";
             }
         }
     } else {
-        // Handle cases where there are missing check-in or check-out times
+        // Error handling in cazul lipsei de check-in sau check-out
         $item->TIMP_LUCRAT = 0;
         $item->PESTE_SUB_NORMA = 'N/A';
     }
-
-    $totalPauzaDuration = 0;
-    $pauzaStatuses = DB::table('condica')
+//Calculul pauzelor
+    $totalPauza = 0; //variabila unde stocam durata pauzelor
+    $pauzaStatus = DB::table('condica') //preluam datele utilizatorilor unde coloana 'stare' este ori 'pauza' ori 'intrare' sortate crescator
         ->select('id', 'data_ora', 'stare')
         ->where('user_id', $item->ID)
         ->whereIn('stare', ['pauza', 'intrare'])
@@ -91,32 +85,32 @@ $raportData = $raportData->map(function ($item) {
         ->orderBy('data_ora')
         ->get();
     
-    $pauzaPair = null;
-    foreach ($pauzaStatuses as $status) {
+    $pauzaPereche = null;//variabila unde stocham o pereche de o pauza si o intrare
+    foreach ($pauzaStatus as $status) { //iteram pentru fiecare user
         if ($status->stare == 'pauza') {
-            // If a pauza status is encountered, store it as the beginning of a pair
-            $pauzaPair = $status;
-        } elseif ($status->stare == 'intrare' && $pauzaPair) {
-            // If an intrare status is encountered and there's a paired pauza status
-            $pauzaStartTime = strtotime($pauzaPair->data_ora);
-            $intrareTime = strtotime($status->data_ora);
-            // Ensure the duration is not negative
-            if ($intrareTime > $pauzaStartTime) {
-                $pauzaDuration = $intrareTime - $pauzaStartTime;
-                $totalPauzaDuration += $pauzaDuration;
+            // Daca intalnim o pauza o setam ca inceputul unei perechi
+            $pauzaPereche = $status;
+        } elseif ($status->stare == 'intrare' && $pauzaPereche) {
+            // Daca intalnim o intrare si avem o pauza in pereche
+            $pauzaStart = strtotime($pauzaPereche->data_ora);
+            $intrare = strtotime($status->data_ora);//string to time
+            // Asiguram ca durata nu este negativa
+            if ($intrare > $pauzaStart) {
+                $durata = $intrare - $pauzaStart; //calcul durata pauza
+                $totalPauza += $durata; 
             }
-            // Reset the pauza pair
-            $pauzaPair = null;
+            // Reset pereche
+            $pauzaPereche = null;
         }
     }
     
-    // Convert the total pauza duration to hours and minutes
-    $totalPauzaHours = floor($totalPauzaDuration / 60);
+    // Calcul durata pauza in minute
+    $totalPauzaMinute = floor($totalPauza / 60);
     
-    // Store the total pauza duration in the item
-    $item->PAUZA_DURATION =  $totalPauzaHours;
+    // stocam durata pauzei in item
+    $item->PAUZA_DURATA =  $totalPauzaMinute;
     
-    
+    //caz in care un user nu are departamentul setat
     if ($item->DEPARTAMENT === null) {
         $item->DEPARTAMENT = 'N/A';
     }
@@ -125,32 +119,31 @@ $raportData = $raportData->map(function ($item) {
 
 
 
-    // Return the view with the data
     return view('raport', ['raportData' => $raportData]);
 }
 
 
-public function data(Request $request, $date)
+public function data(Request $request, $date)  // Functie similara pentru calculul timpului lucrat + numarul si durata pauzelor pentru o zi aleasa din datepicker si stocata in variabila $date
+
 {
-    // Fetch the required data from the database
     $raportData = DB::table('utilizator')
         ->leftJoin('condica as intrare', function ($join) use ($date) {
             $join->on('utilizator.id', '=', 'intrare.user_id')
                 ->where('intrare.stare', '=', 'intrare')
                 ->whereDate('intrare.data_ora', '=', $date)
-                ->orderBy('intrare.data_ora', 'asc'); // Get the first entry of the day
+                ->orderBy('intrare.data_ora', 'asc'); 
         })
         ->leftJoin('condica as iesire', function ($join) use ($date) {
             $join->on('utilizator.id', '=', 'iesire.user_id')
                 ->where('iesire.stare', '=', 'iesire')
                 ->whereDate('iesire.data_ora', '=', $date)
-                ->orderBy('iesire.data_ora', 'desc'); // Get the last entry of the day
+                ->orderBy('iesire.data_ora', 'desc'); // DE STERS !!!!
         })
         ->select(
             'utilizator.id as ID',
             'utilizator.nume as NUME',
             DB::raw('MIN(intrare.data_ora) as CHECK_IN'),
-            DB::raw('(SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "iesire" AND DATE(data_ora)= "'.$date.'" AND data_ora > (SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "intrare" AND DATE(data_ora) = "'.$date.'" ORDER BY data_ora LIMIT 1) ORDER BY data_ora LIMIT 1) as CHECK_OUT'), // Select the first check-out after the check-in
+            DB::raw('(SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "iesire" AND DATE(data_ora)= "'.$date.'" AND data_ora > (SELECT data_ora FROM condica WHERE user_id = utilizator.id AND stare = "intrare" AND DATE(data_ora) = "'.$date.'" ORDER BY data_ora LIMIT 1) ORDER BY data_ora LIMIT 1) as CHECK_OUT'), 
             'utilizator.departament as DEPARTAMENT',
             DB::raw("(SELECT COUNT(*) FROM condica WHERE user_id = utilizator.id AND stare = 'pauza' AND DATE(data_ora) = '$date') as PAUZA_COUNT")
         )
@@ -158,58 +151,50 @@ public function data(Request $request, $date)
         ->get();
 
     if ($raportData->isEmpty()) {
-        // Return a response indicating that no data is available for the specified date
         return response()->json(['error' => 'Nu exista date.'], 404);
     }
 
-    // Calculate TIMP_LUCRAT and PESTE/SUB NORMA
     $raportData = $raportData->map(function ($item) use($date) {
         $item->CHECK_IN = $item->CHECK_IN ?: 'N/A';
         $item->CHECK_OUT = $item->CHECK_OUT ?: 'N/A';
 
-        // Check for null values before processing
         if ($item->CHECK_IN && $item->CHECK_OUT) {
             $checkIn = strtotime($item->CHECK_IN);
             $checkOut = strtotime($item->CHECK_OUT);
 
-            // Check for division by zero
+            // Caz de impartire la 0
             if ($checkOut - $checkIn != 0) {
-                // Calculate TIMP_LUCRAT
-                $workedHours = ($checkOut - $checkIn) / 3600;
-                $workedMinutes = ($checkOut - $checkIn) / 60;
+                $orePrezenta = ($checkOut - $checkIn) / 3600;
+                $minutePrezenta = ($checkOut - $checkIn) / 60;
 
-                if ($workedHours > 0) {
-                    if ($workedHours > 1.1) {
-                        $item->TIMP_LUCRAT = round($workedHours, 1) . ' ore';
-                    } elseif ($workedHours >= 1 && $workedHours < 1.1) {
-                        $item->TIMP_LUCRAT = round($workedHours, 1) . ' ora';
+                if ($orePrezenta > 0) {
+                    if ($orePrezenta > 1.1) {
+                        $item->TIMP_LUCRAT = round($orePrezenta, 1) . ' ore';
+                    } elseif ($orePrezenta >= 1 && $orePrezenta < 1.1) {
+                        $item->TIMP_LUCRAT = round($orePrezenta, 1) . ' ora';
                     } else {
-                        $item->TIMP_LUCRAT = round($workedMinutes, 1) . ' minute';
+                        $item->TIMP_LUCRAT = round($minutePrezenta, 3) . ' minute';
                     }
                 } else {
                     $item->TIMP_LUCRAT = 0;
                 }
 
-                // Fetch the timp_de_lucru from the database for each user
                 $timpDeLucru = DB::table('utilizator')->where('id', $item->ID)->value('timp_de_lucru');
 
-                // Determine if worked hours are PESTE or SUB NORMA
                 if ($checkOut) {
-                    if ($workedHours > $timpDeLucru) {
-                        $item->PESTE_SUB_NORMA = 'PESTE :' . round($workedHours - $timpDeLucru, 1) ." ore";
+                    if ($orePrezenta > $timpDeLucru) {
+                        $item->PESTE_SUB_NORMA = 'PESTE :' . round($orePrezenta - $timpDeLucru, 1) ." ore";
                     } else {
-                        $item->PESTE_SUB_NORMA = 'SUB :' . round($workedHours - $timpDeLucru, 1) ." ore";
+                        $item->PESTE_SUB_NORMA = 'SUB :' . round($orePrezenta - $timpDeLucru, 1) ." ore";
                     }
                 } else {
                     $item->PESTE_SUB_NORMA = 'N/A';
                 }
             } else {
-                // Handle division by zero case
                 $item->TIMP_LUCRAT = 0;
                 $item->PESTE_SUB_NORMA = 'N/A';
             }
         } else {
-            // Handle null values
             $item->TIMP_LUCRAT = 0;
             $item->PESTE_SUB_NORMA = 'N/A';
         }
@@ -220,10 +205,9 @@ public function data(Request $request, $date)
         return $item;
     });
 
-    // Calculate pauza durations
     foreach ($raportData as $item) {
-        $totalPauzaDuration = 0;
-        $pauzaStatuses = DB::table('condica')
+        $totalPauza = 0;
+        $pauzaStatus = DB::table('condica')
             ->select('id', 'data_ora', 'stare')
             ->where('user_id', $item->ID)
             ->whereIn('stare', ['pauza', 'intrare'])
@@ -231,174 +215,145 @@ public function data(Request $request, $date)
             ->orderBy('data_ora')
             ->get();
         
-        $pauzaPair = null;
-        foreach ($pauzaStatuses as $status) {
+        $pauzaPereche = null;
+        foreach ($pauzaStatus as $status) {
             if ($status->stare == 'pauza') {
-                // If a pauza status is encountered, store it as the beginning of a pair
-                $pauzaPair = $status;
-            } elseif ($status->stare == 'intrare' && $pauzaPair) {
-                // If an intrare status is encountered and there's a paired pauza status
-                $pauzaStartTime = strtotime($pauzaPair->data_ora);
-                $intrareTime = strtotime($status->data_ora);
-                // Ensure the duration is not negative
-                if ($intrareTime > $pauzaStartTime) {
-                    $pauzaDuration = $intrareTime - $pauzaStartTime;
-                    $totalPauzaDuration += $pauzaDuration;
+                $pauzaPereche = $status;
+            } elseif ($status->stare == 'intrare' && $pauzaPereche) {
+                $pauzaStart = strtotime($pauzaPereche->data_ora);
+                $intrare = strtotime($status->data_ora);
+                if ($intrare > $pauzaStart) {
+                    $durata = $intrare - $pauzaStart;
+                    $totalPauza += $durata;
                 }
-                // Reset the pauza pair
-                $pauzaPair = null;
+                $pauzaPereche = null;
             }
         }
         
-        // Convert the total pauza duration to hours and minutes
-        $totalPauzaHours = floor($totalPauzaDuration / 60);
+        $totalPauzaMinute = floor($totalPauza / 60);
         
-        // Store the total pauza duration in the item
-        $item->PAUZA_DURATION =  $totalPauzaHours;
+        $item->PAUZA_DURATA =  $totalPauzaMinute;
     }
 
-    // Return the view with the data
     return response()->json(['raportData' => $raportData, 'date' => $date]);
 }
 
 
     
     
-  public function lunar()
+  public function lunar() //afisarea orelor lucrate pe parcursul lunii curente
     {
         
-        // Fetch all users from the 'utilizator' table
+        // Preluam toti utilizatorii
         $users = DB::table('utilizator')->select('id', 'nume','departament')->get();
 
-        // Initialize an array to store presence hours for each user
-        $presenceHours = [];
-
-        // Define the start and end dates of the month
-        $currentMonth = Carbon::now()->month;
+        // Preluam luna curenta
+        $lunaCurenta = Carbon::now()->month;
 
 
-        // Loop through each user
+
         foreach ($users as $user) {
-            // Query the database to retrieve attendance data for the user and the month
-            $attendanceData = DB::table('condica')
+            // Preluam datele de intrare/iesire din baza de date pe luna aceasta
+            $dataLunar = DB::table('condica')
                 ->select('stare', 'data_ora')
                 ->where('user_id', $user->id)
-                ->whereMonth('data_ora', $currentMonth)
+                ->whereMonth('data_ora', $lunaCurenta)
                 ->orderBy('data_ora')
                 ->get();
 
-            // Calculate total presence hours for the user
-            $totalPresenceMinutes = $this->calculateTotalPresenceMinutes($attendanceData);
-            if (isset($user->departament)) {
+            // Calculul orelor totale
+            $totalPrezentaOre = $this->calcul_total_prezenta($dataLunar);
+            if (isset($user->departament)) { 
                 $departament = $user->departament;
             } else {
                 $departament = "N/A";
             }
-            // Store the total presence hours for the user
-            $presenceMinutes[$user->id] = [
-                'name' => $user->nume,
-                'totalMinutes' => $totalPresenceMinutes,
+            // Stocam orele totale pt user
+            $prezentaData[$user->id] = [
+                'nume' => $user->nume,
+                'totalOre' => $totalPrezentaOre,
                 'departament' => $departament,
             ];
         }
            
            
 
-    // Return the view with the data
-    return view('raportlunar', ['presenceMinutes' => $presenceMinutes]);
+    return view('raportlunar', ['prezentaData' => $prezentaData]);
 }
-private function calculateTotalPresenceMinutes($attendanceData)
+private function calcul_total_prezenta($dataLunar) //functia care calculeazaa timpul total lucrat
 {
-    $totalPresenceMinutes = 0;
-    $previousDate = null;
-    $entryTimestamp = null;
-    $exitTimestamp = null;
+    $totalPrezentaOre = 0;
 
-    // Group attendance data by date
-    $groupedAttendance = $attendanceData->groupBy(function ($item) {
-        return substr($item->data_ora, 0, 10); // Group by date (YYYY-MM-DD)
+    $GroupData = $dataLunar->groupBy(function ($item) {
+        return substr($item->data_ora, 0, 10); // Grupam dupa data: (YYYY-MM-DD)
     });
 
-    // Loop through grouped attendance data
-    foreach ($groupedAttendance as $date => $records) {
-        $firstIntrare = null;
-        $firstIesireAfterIntrare = null;
+    foreach ($GroupData as $date => $records) {
+        $primaIntrare = null;
+        $iesire = null;
     
-        // Loop through records of the day
+        // Loop pentru datele dintr-o zi
         foreach ($records as $record) {
             if ($record->stare === 'intrare') {
-                // Set the first 'intrare' of the day
-                if ($firstIntrare === null) {
-                    $firstIntrare = strtotime($record->data_ora);
+                // Setam prima intrare din ziua respectiva
+                if ($primaIntrare === null) {
+                    $primaIntrare = strtotime($record->data_ora);
                 }
             } elseif ($record->stare === 'iesire') {
-                // Check if it's the first 'iesire' after the first 'intrare'
-                if ($firstIntrare !== null && $firstIesireAfterIntrare === null && strtotime($record->data_ora) > $firstIntrare) {
-                    $firstIesireAfterIntrare = strtotime($record->data_ora);
+                // Verificam daca iesirea urmeaza dupa prima intrare
+                if ($primaIntrare !== null && $iesire === null && strtotime($record->data_ora) > $primaIntrare) {
+                    $iesire = strtotime($record->data_ora);
                 }
             }
         }
     
-        // If both 'intrare' and 'iesire' exist for the day, and firstIesireAfterIntrare is set, calculate presence time
-        if ($firstIntrare !== null && $firstIesireAfterIntrare !== null) {
-            $presenceTimeSeconds = $firstIesireAfterIntrare - $firstIntrare;
-            $presenceTimeMinutes = max(0, $presenceTimeSeconds / 60); // Convert seconds to minutes
-            $totalPresenceMinutes += $presenceTimeMinutes;
+        // Daca avem setata o intrare si o iesire in ziua respectiva calculam timpul lucrat
+        if ($primaIntrare !== null && $iesire !== null) {
+            $prezentaSecunde = $iesire - $primaIntrare;
+            $timpPrezenta = max(0, $prezentaSecunde / 60); // Convertire din secunde in minute
+            $totalPrezentaOre += $timpPrezenta;
         }
     }
     
 
-    return (round($totalPresenceMinutes/60, 2) . ' ore');
+    return (round($totalPrezentaOre/60, 2) . ' ore'); //rotunjim cu 2 zecimale
 }
 
 
-public function lunardata(Request $request, $date)
+public function lunardata(Request $request, $date) //afisarea orelor lucrate pe parcursul lunii alese din datepicker
 {
-    // Fetch all users from the 'utilizator' table
     $users = DB::table('utilizator')->select('id', 'nume', 'departament')->get();
 
-    // Initialize an array to store presence minutes for each user
-    $presenceMinutes = [];
+    $prezentaData = [];
 
-    // Define the start and end dates of the month
-    $currentMonth = $date;
+    // luna preluata
+    $lunaCurenta = $date;
 
-    // Loop through each user
     foreach ($users as $user) {
-        // Query the database to retrieve attendance data for the user and the month
-        $attendanceData = DB::table('condica')
+        $dataLunar = DB::table('condica')
             ->select('stare', 'data_ora')
             ->where('user_id', $user->id)
-            ->whereMonth('data_ora', $currentMonth)
+            ->whereMonth('data_ora', $lunaCurenta)
             ->orderBy('data_ora')
             ->get();
 
-        // Calculate total presence minutes for the user
-        $totalPresenceMinutes = $this->calculateTotalPresenceMinutes($attendanceData);
+        $totalPrezentaOre = $this->calcul_total_prezenta($dataLunar);
         if (isset($user->departament)) {
             $departament = $user->departament;
         } else {
             $departament = "N/A";
         }
-        // Store the presence minutes data for the user
-        $presenceMinutes[] = [
+        $prezentaData[] = [
             'id' => $user->id,
-            'name' => $user->nume,
-            'totalMinutes' => $totalPresenceMinutes,
+            'nume' => $user->nume,
+            'totalOre' => $totalPrezentaOre,
             'departament' => $departament,
         ];
     }
 
-    // Return the presence minutes data
-    return response()->json(['presenceMinutes' => $presenceMinutes, 'date' => $date]);
+    return response()->json(['prezentaData' => $prezentaData, 'date' => $date]);
 }
-
-
-
-
 }
-
-
 
 
 
